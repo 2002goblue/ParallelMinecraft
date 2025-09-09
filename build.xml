@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="minecraft-0.8-alpha" default="run" basedir=".">
+  <!-- paths -->
+  <property name="src.dir" value="."/>
+  <property name="build.dir" value="build/classes"/>
+  <property name="dist.dir" value="dist"/>
+  <property name="lib.dir" value="lib"/>
+  <property name="natives.dir" value="natives/windows"/>
+
+  <!-- CHANGE THIS if the main class differs -->
+  <property name="main.class" value="com.mojang.minecraft.Minecraft"/>
+
+  <path id="compile.classpath">
+    <fileset dir="${lib.dir}">
+      <include name="lwjgl.jar"/>
+      <include name="lwjgl_util.jar"/>
+      <include name="jinput.jar"/>
+    </fileset>
+  </path>
+
+  <target name="clean">
+    <delete dir="${build.dir}"/>
+    <delete dir="${dist.dir}"/>
+  </target>
+
+ <target name="compile">
+    <mkdir dir="${build.dir}"/>
+    <javac destdir="${build.dir}" includeantruntime="false" source="1.6" target="1.6" debug="true">
+      <classpath refid="compile.classpath"/>
+      <src path="${src.dir}"/>
+      <include name="com/**"/>
+    </javac>
+
+    <!-- copy ALL assets (recursively) so getResourceAsStream can find them in the jar -->
+    <copy todir="${build.dir}">
+      <fileset dir="." includes="**/*.png,**/*.gif"/>
+    </copy>
+  </target>
+
+  <target name="jar" depends="compile">
+    <mkdir dir="${dist.dir}"/>
+    <jar destfile="${dist.dir}/minecraft-0.8-alpha.jar" basedir="${build.dir}">
+      <manifest>
+        <attribute name="Main-Class" value="${main.class}"/>
+        <attribute name="Class-Path" value="lwjgl.jar lwjgl_util.jar jinput.jar"/>
+      </manifest>
+    </jar>
+    <copy todir="${dist.dir}">
+      <fileset dir="${lib.dir}" includes="lwjgl.jar,lwjgl_util.jar,jinput.jar"/>
+    </copy>
+    <copy todir="${dist.dir}/natives">
+      <fileset dir="${natives.dir}" includes="**/*"/>
+    </copy>
+  </target>
+
+<target name="run" depends="jar">
+  <java classname="${main.class}" fork="true" failonerror="true">
+    <!-- Set working dir if you want, but don't rely on it for classpath resolution -->
+    <sysproperty key="java.library.path" value="${dist.dir}/natives"/>
+
+    <classpath>
+      <pathelement location="${dist.dir}/minecraft-0.8-alpha.jar"/>
+      <pathelement location="${dist.dir}/lwjgl.jar"/>
+      <pathelement location="${dist.dir}/lwjgl_util.jar"/>
+      <pathelement location="${dist.dir}/jinput.jar"/>
+      <!-- Optional: include the dist folder itself (for loose resources) -->
+      <pathelement path="${dist.dir}"/>
+    </classpath>
+  </java>
+</target>
+</project>
