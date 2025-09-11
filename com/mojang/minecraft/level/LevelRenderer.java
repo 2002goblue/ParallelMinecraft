@@ -97,7 +97,11 @@ public class LevelRenderer implements LevelListener {
          Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
 
          for(int i = 0; i < 8 && i < dirty.size(); ++i) {
+            long t0 = System.nanoTime();                   // <-- start
             ((Chunk)dirty.get(i)).rebuild();
+            Chunk.meshTimeNanos += System.nanoTime() - t0; // <-- accumulate
+            Chunk.meshCount++;                             // <-- count
+
          }
 
       }

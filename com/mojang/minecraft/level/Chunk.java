@@ -25,6 +25,9 @@ public class Chunk {
    public static int updates;
    private static long totalTime;
    private static int totalUpdates;
+   // Timing metrics (since last HUD sample)
+   public static long meshTimeNanos = 0L;
+   public static int  meshCount     = 0;
 
    static {
       t = Tesselator.instance;

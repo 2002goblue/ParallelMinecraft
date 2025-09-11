@@ -117,7 +117,7 @@ public class Minecraft implements Runnable {
       GL11.glLoadIdentity();
       GL11.glMatrixMode(5888);
       this.checkGlError("Startup");
-      this.level = new Level(1024, 1024, 74);
+      this.level = new Level(1024, 1024, 64);
       this.levelRenderer = new LevelRenderer(this.level, this.textures);
       this.player = new Player(this.level);
       this.particleEngine = new ParticleEngine(this.level, this.textures);
@@ -202,8 +202,21 @@ public class Minecraft implements Runnable {
                ++frames;
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
-                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates";
+                  double avgMeshMs = (Chunk.meshCount == 0) ? 0.0
+                  : (Chunk.meshTimeNanos / 1000000.0) / Chunk.meshCount;
+
+
+                  int dirtyNow = this.levelRenderer.getAllDirtyChunks() == null ? 0
+                  : this.levelRenderer.getAllDirtyChunks().size();
+
+                  this.fpsString = String.format(
+                  "%d fps, %d chunk updates, mesh %.2f ms/chunk, %d dirty pending",
+                  frames, Chunk.updates, avgMeshMs, dirtyNow
+                  );
+
                   Chunk.updates = 0;
+                  Chunk.meshTimeNanos = 0L;
+                  Chunk.meshCount = 0;
                   lastTime += 1000L;
                   frames = 0;
                }
@@ -613,7 +626,7 @@ public class Minecraft implements Runnable {
    }
 
    public static void main(String[] args) throws LWJGLException {
-      Minecraft minecraft = new Minecraft((Canvas)null, 854, 480, false);
+      Minecraft minecraft = new Minecraft((Canvas)null, 854, 480, true);
       (new Thread(minecraft)).start();
    }
 }
