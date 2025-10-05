@@ -20,7 +20,7 @@ public class Level {
    private byte[] blocks;
    private int[] lightDepths;
    private ArrayList levelListeners = new ArrayList();
-   private Random random = new Random();
+   private Random random = new Random(12345L);
    int unprocessed = 0;
 
    public Level(int w, int h, int d) {

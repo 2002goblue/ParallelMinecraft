@@ -16,7 +16,7 @@ public class NoiseMap {
    }
 
    public int[] read(int width, int height) {
-      Random random = new Random();
+      Random random = new Random(12345L);
       int[] tmp = new int[width * height];
       int level = this.levels;
       int step = width >> level;
