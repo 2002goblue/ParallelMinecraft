@@ -22,6 +22,13 @@ public class LevelRenderer implements LevelListener {
    private int zChunks;
    private Textures textures;
 
+   // === Initial dirty build stopwatch (single-threaded) ===
+   private boolean initialBuildStarted = false;
+   private boolean initialBuildFinished = false;
+   private long initialBuildStartNanos = 0L;
+   private long initialBuildEndNanos = 0L;
+   private int initialDirtyTotal = 0;      // snapshot of dirty size at start
+
    public LevelRenderer(Level level, Textures textures) {
       this.level = level;
       this.textures = textures;
@@ -59,6 +66,19 @@ public class LevelRenderer implements LevelListener {
 
    }
 
+   public boolean hasInitialBuildFinished() {
+    return initialBuildFinished;
+   }
+
+   public long getInitialBuildMillis() {
+      if (!initialBuildFinished) return -1L;
+      return (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+   }
+
+   public int getInitialDirtyTotal() {
+      return initialDirtyTotal;
+   }
+
    public List getAllDirtyChunks() {
       ArrayList dirty = null;
 
@@ -93,6 +113,17 @@ public class LevelRenderer implements LevelListener {
 
    public void updateDirtyChunks(Player player) {
       List dirty = this.getAllDirtyChunks();
+      // Start stopwatch the first time we detect any dirty chunks in the original pass
+      if (!initialBuildStarted && dirty != null && !dirty.isEmpty()) {
+         initialBuildStarted = true;
+         initialBuildFinished = false;
+         initialBuildStartNanos = System.nanoTime();
+         initialBuildEndNanos = 0L;
+
+         // If your 'dirty' list is a list of unique chunks, this is fine.
+         // (If it's per-layer or can contain dupes, you can de-dup; otherwise keep as-is.)
+         initialDirtyTotal = dirty.size();
+      }
       if (dirty != null) {
          Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
 
@@ -105,6 +136,19 @@ public class LevelRenderer implements LevelListener {
          }
 
       }
+      // Finish when no dirty chunks remain
+      if (initialBuildStarted && !initialBuildFinished) {
+         List dirtyAfter = this.getAllDirtyChunks();
+         boolean noneLeft = (dirtyAfter == null || dirtyAfter.isEmpty());
+         if (noneLeft) {
+            initialBuildFinished = true;
+            initialBuildEndNanos = System.nanoTime();
+            long ms = (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+            System.out.println("[LevelRenderer] Initial dirty chunk build finished in " + ms + " ms"
+                  + " (" + initialDirtyTotal + " chunks)");
+         }
+      }
+
    }
 
    public void pick(Player player, Frustum frustum) {
