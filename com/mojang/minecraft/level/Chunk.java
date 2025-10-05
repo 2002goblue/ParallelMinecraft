@@ -51,6 +51,32 @@ public class Chunk {
       this.lists = GL11.glGenLists(2);
    }
 
+    // Worker-thread: build MeshData for one layer (no GL calls here!)
+   public com.mojang.minecraft.renderer.Tesselator.MeshData buildMeshData(int layer) {
+      com.mojang.minecraft.renderer.Tesselator workerTess = new com.mojang.minecraft.renderer.Tesselator();
+      workerTess.init();
+      int tiles = 0;
+
+      for (int x = this.x0; x < this.x1; ++x) {
+         for (int y = this.y0; y < this.y1; ++y) {
+            for (int z = this.z0; z < this.z1; ++z) {
+               int tileId = this.level.getTile(x, y, z);
+               if (tileId > 0) {
+                  com.mojang.minecraft.level.tile.Tile.tiles[tileId].render(workerTess, this.level, layer, x, y, z);
+                  ++tiles;
+               }
+            }
+         }
+      }
+      return workerTess.snapshot();
+   }
+
+   public void uploadMeshDataToDisplayList(com.mojang.minecraft.renderer.Tesselator.MeshData md, int layer) {
+      org.lwjgl.opengl.GL11.glNewList(this.lists + layer, 4864 /* GL_COMPILE */);
+      md.emitToGL();
+      org.lwjgl.opengl.GL11.glEndList();
+   }
+
    private void rebuild(int layer) {
       this.dirty = false;
       ++updates;
@@ -96,6 +122,10 @@ public class Chunk {
       }
 
       this.dirty = true;
+   }
+
+   public void markClean() {
+      this.dirty = false;
    }
 
    public boolean isDirty() {

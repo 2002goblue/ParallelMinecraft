@@ -11,6 +11,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.lwjgl.opengl.GL11;
+import java.util.concurrent.*;
+import java.util.Map;
+import java.util.HashMap;
 
 public class LevelRenderer implements LevelListener {
    public static final int MAX_REBUILDS_PER_FRAME = 8;
@@ -21,6 +24,14 @@ public class LevelRenderer implements LevelListener {
    private int yChunks;
    private int zChunks;
    private Textures textures;
+    // === Multithreaded meshing infra ===
+   private static final ExecutorService MESH_POOL =
+         Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+
+   private final Map<Chunk, Future<Tesselator.MeshData[]>> inflight =
+      new HashMap<Chunk, Future<Tesselator.MeshData[]>>();
+   private static final int MAX_NEW_SUBMITS_PER_FRAME = 8; // how many new jobs we kick each frame
+   // ====================================
 
    public LevelRenderer(Level level, Textures textures) {
       this.level = level;
@@ -91,19 +102,56 @@ public class LevelRenderer implements LevelListener {
       GL11.glDisable(3553);
    }
 
-   public void updateDirtyChunks(Player player) {
-      List dirty = this.getAllDirtyChunks();
-      if (dirty != null) {
-         Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
-
-         for(int i = 0; i < 8 && i < dirty.size(); ++i) {
-            long t0 = System.nanoTime();                   // <-- start
-            ((Chunk)dirty.get(i)).rebuild();
-            Chunk.meshTimeNanos += System.nanoTime() - t0; // <-- accumulate
-            Chunk.meshCount++;                             // <-- count
-
+ public void updateDirtyChunks(Player player) {
+      // 1) First, collect any finished jobs and upload them on the render thread
+      if (!inflight.isEmpty()) {
+         ArrayList<Chunk> finished = new ArrayList<Chunk>();
+         for (Map.Entry<Chunk, Future<com.mojang.minecraft.renderer.Tesselator.MeshData[]>> e : inflight.entrySet()) {
+            Future<com.mojang.minecraft.renderer.Tesselator.MeshData[]> f = e.getValue();
+            if (f.isDone()) {
+               try {
+                  Tesselator.MeshData[] layers = f.get();
+                  // Compile display lists on RENDER THREAD ONLY:
+                  e.getKey().uploadMeshDataToDisplayList(layers[0], 0);
+                  e.getKey().uploadMeshDataToDisplayList(layers[1], 1);
+                  e.getKey().markClean(); // mark clean after upload
+               } catch (Exception ex) {
+                  ex.printStackTrace(); // if something failed, keep it dirty
+               }
+               finished.add(e.getKey());
+            }
          }
+         for (Chunk c : finished) inflight.remove(c);
+      }
 
+      // 2) Now (after uploads), schedule new jobs for still-dirty chunks
+      List dirty = this.getAllDirtyChunks();
+      if (dirty == null || dirty.isEmpty()) return;
+
+      Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
+      int submitted = 0;
+
+      for (int i = 0; i < dirty.size() && submitted < MAX_NEW_SUBMITS_PER_FRAME; ++i) {
+         Chunk c = (Chunk) dirty.get(i);
+         if (inflight.containsKey(c)) continue;               // already building
+         if (!c.isDirty())    continue;                       // maybe got rebuilt
+         final Chunk target = c;
+
+         long t0 = System.nanoTime();
+         Future<Tesselator.MeshData[]> fut =
+            MESH_POOL.submit(new Callable<Tesselator.MeshData[]>() {
+               public Tesselator.MeshData[] call() {
+                  Tesselator.MeshData solid = target.buildMeshData(0);
+                  Tesselator.MeshData alpha  = target.buildMeshData(1);
+                  return new Tesselator.MeshData[] { solid, alpha };
+               }
+            });
+
+         inflight.put(target, fut);
+         // (Optional) your profiling counters:
+         Chunk.meshTimeNanos += System.nanoTime() - t0;
+         Chunk.meshCount++;
+         submitted++;
       }
    }
 
