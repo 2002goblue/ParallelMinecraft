@@ -41,7 +41,7 @@ public class LevelRenderer implements LevelListener {
    // and how many remain to be uploaded at least once.
    private int initialDirtyTotal = 0;
    private int initialDirtyRemaining = 0;
-   private static final int MAX_NEW_SUBMITS_PER_FRAME = 8; // how many new jobs we kick each frame
+   private static final int MAX_NEW_SUBMITS_PER_FRAME = 24; // how many new jobs we kick each frame
    // ====================================
 
    public LevelRenderer(Level level, Textures textures) {
