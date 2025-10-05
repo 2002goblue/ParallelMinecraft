@@ -209,10 +209,20 @@ public class Minecraft implements Runnable {
                   int dirtyNow = this.levelRenderer.getAllDirtyChunks() == null ? 0
                   : this.levelRenderer.getAllDirtyChunks().size();
 
+                  if (levelRenderer.hasInitialBuildFinished()) {
+                     long ms = levelRenderer.getInitialBuildMillis();
+                     // drawString("Initial build: " + ms + " ms", x, y, 0xFFFFFF);
+                     this.fpsString = String.format(
+                     "%d fps, %d chunk updates, mesh %.2f ms/chunk, %d dirty pending, %d init time",
+                     frames, Chunk.updates, avgMeshMs, dirtyNow, ms
+                     );                    
+                  } else {
+
                   this.fpsString = String.format(
                   "%d fps, %d chunk updates, mesh %.2f ms/chunk, %d dirty pending",
                   frames, Chunk.updates, avgMeshMs, dirtyNow
                   );
+                  }
 
                   Chunk.updates = 0;
                   Chunk.meshTimeNanos = 0L;

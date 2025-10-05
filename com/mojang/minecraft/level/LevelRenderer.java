@@ -30,6 +30,17 @@ public class LevelRenderer implements LevelListener {
 
    private final Map<Chunk, Future<Tesselator.MeshData[]>> inflight =
       new HashMap<Chunk, Future<Tesselator.MeshData[]>>();
+   private final Map<Chunk, Long> inflightStartNanos =
+      new HashMap<Chunk, Long>();
+   // === Initial build stopwatch ===
+   private boolean initialBuildStarted = false;
+   private boolean initialBuildFinished = false;
+   private long initialBuildStartNanos = 0L;
+   private long initialBuildEndNanos = 0L;
+   // Tracks how many chunks were dirty at the moment we started timing,
+   // and how many remain to be uploaded at least once.
+   private int initialDirtyTotal = 0;
+   private int initialDirtyRemaining = 0;
    private static final int MAX_NEW_SUBMITS_PER_FRAME = 8; // how many new jobs we kick each frame
    // ====================================
 
@@ -68,6 +79,15 @@ public class LevelRenderer implements LevelListener {
          }
       }
 
+   }
+
+   public boolean hasInitialBuildFinished() {
+      return initialBuildFinished;
+   }
+
+   public long getInitialBuildMillis() {
+      if (!initialBuildFinished) return -1L;
+      return (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
    }
 
    public List getAllDirtyChunks() {
@@ -115,6 +135,15 @@ public class LevelRenderer implements LevelListener {
                   e.getKey().uploadMeshDataToDisplayList(layers[0], 0);
                   e.getKey().uploadMeshDataToDisplayList(layers[1], 1);
                   e.getKey().markClean(); // mark clean after upload
+                  Long started = inflightStartNanos.remove(e.getKey());
+                  if (started != null) {
+                        long dt = System.nanoTime() - started.longValue();
+                        Chunk.addRebuildSample(dt);
+                  }
+                  // Count this chunk as done for the initial wave (once).
+                  if (initialBuildStarted && !initialBuildFinished && initialDirtyRemaining > 0) {
+                     initialDirtyRemaining--;
+                  }
                } catch (Exception ex) {
                   ex.printStackTrace(); // if something failed, keep it dirty
                }
@@ -124,17 +153,45 @@ public class LevelRenderer implements LevelListener {
          for (Chunk c : finished) inflight.remove(c);
       }
 
-      // 2) Now (after uploads), schedule new jobs for still-dirty chunks
       List dirty = this.getAllDirtyChunks();
-      if (dirty == null || dirty.isEmpty()) return;
 
-      Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
+      // Start stopwatch the first time we detect any dirty chunks.
+      // Capture the count *once* so we don't depend on later list recomputations.
+      if (!initialBuildStarted && dirty != null && !dirty.isEmpty()) {
+         initialBuildStarted = true;
+         initialBuildFinished = false;
+         initialDirtyTotal = dirty.size();
+         initialDirtyRemaining = initialDirtyTotal;
+         initialBuildStartNanos = System.nanoTime();
+         initialBuildEndNanos = 0L;
+      }
+
+      // Finish when we've uploaded the first batch of dirty chunks and no jobs remain.
+      if (initialBuildStarted && !initialBuildFinished) {
+         if (initialDirtyRemaining <= 0 && inflight.isEmpty()) {
+            initialBuildFinished = true;
+            initialBuildEndNanos = System.nanoTime();
+            long ms = (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+            System.out.println("[LevelRenderer] Initial dirty chunk build finished in " + ms + " ms"
+                  + " (" + initialDirtyTotal + " chunks)");
+         }
+      }
+
+// We do not return early here; we want to allow "finish" detection even if dirty is empty now.
+// (Submissions may have happened in prior frames; we need to check inflight emptiness below.)
+
+      // Safe sort: only when we have 2+ items and a non-null frustum & player
+      Frustum fr = Frustum.getFrustum();
+      if (dirty != null && dirty.size() > 1 && player != null && fr != null) {
+         Collections.sort(dirty, new DirtyChunkSorter(player, fr));
+      }
       int submitted = 0;
 
-      for (int i = 0; i < dirty.size() && submitted < MAX_NEW_SUBMITS_PER_FRAME; ++i) {
+      for (int i = 0; dirty != null && i < dirty.size() && submitted < MAX_NEW_SUBMITS_PER_FRAME; ++i) {
          Chunk c = (Chunk) dirty.get(i);
-         if (inflight.containsKey(c)) continue;               // already building
-         if (!c.isDirty())    continue;                       // maybe got rebuilt
+         if (c == null) continue;                      // skip null entries defensively
+         if (inflight.containsKey(c)) continue;
+         if (!c.isDirty()) continue;
          final Chunk target = c;
 
          long t0 = System.nanoTime();
@@ -148,10 +205,25 @@ public class LevelRenderer implements LevelListener {
             });
 
          inflight.put(target, fut);
+         inflight.put(target, fut);
+         inflightStartNanos.put(target, Long.valueOf(System.nanoTime()));
          // (Optional) your profiling counters:
          Chunk.meshTimeNanos += System.nanoTime() - t0;
          Chunk.meshCount++;
          submitted++;
+      }
+
+      // Recompute or check state after we uploaded/submitted this frame.
+      // Finish when no dirty chunks remain and no jobs are inflight.
+      if (initialBuildStarted && !initialBuildFinished) {
+         List dirtyAfter = this.getAllDirtyChunks();
+         boolean noneLeft = (dirtyAfter == null || dirtyAfter.isEmpty());
+         if (noneLeft && inflight.isEmpty()) {
+            initialBuildFinished = true;
+            initialBuildEndNanos = System.nanoTime();
+            long ms = (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+            System.out.println("[LevelRenderer] Initial dirty chunk build finished in " + ms + " ms");
+         }
       }
    }
 

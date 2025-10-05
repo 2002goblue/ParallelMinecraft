@@ -36,6 +36,12 @@ public class Chunk {
       totalUpdates = 0;
    }
 
+   // Record a timing sample from outside the class (e.g., after a threaded rebuild finishes)
+   public static void addRebuildSample(long nanos) {
+      totalTime += nanos;
+      ++totalUpdates;
+   }
+
    public Chunk(Level level, int x0, int y0, int z0, int x1, int y1, int z1) {
       this.level = level;
       this.x0 = x0;
