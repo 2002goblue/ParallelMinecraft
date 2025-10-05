@@ -3,7 +3,7 @@ package com.mojang.minecraft.level;
 import java.util.Random;
 
 public class NoiseMap {
-   Random random = new Random();
+   Random random = new Random(12345L);
    int seed;
    int levels;
    int fuzz;
