@@ -6,6 +6,9 @@ import com.mojang.minecraft.phys.AABB;
 import com.mojang.minecraft.renderer.Tesselator;
 import org.lwjgl.opengl.GL11;
 
+// Reuse one direct-buffer Tesselator per worker thread to avoid DirectBuffer OOM
+
+
 public class Chunk {
    public AABB aabb;
    public final Level level;
@@ -36,6 +39,10 @@ public class Chunk {
       totalUpdates = 0;
    }
 
+   private static final ThreadLocal<Tesselator> TL_TESS = new ThreadLocal<Tesselator>() {
+      @Override protected Tesselator initialValue() { return new Tesselator(); }
+   };
+
    // Record a timing sample from outside the class (e.g., after a threaded rebuild finishes)
    public static void addRebuildSample(long nanos) {
       totalTime += nanos;
@@ -59,7 +66,7 @@ public class Chunk {
 
     // Worker-thread: build MeshData for one layer (no GL calls here!)
    public com.mojang.minecraft.renderer.Tesselator.MeshData buildMeshData(int layer) {
-      com.mojang.minecraft.renderer.Tesselator workerTess = new com.mojang.minecraft.renderer.Tesselator();
+      com.mojang.minecraft.renderer.Tesselator workerTess = TL_TESS.get();
       workerTess.init();
       int tiles = 0;
 

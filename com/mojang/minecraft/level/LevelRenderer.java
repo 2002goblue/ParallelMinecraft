@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.List;
 import org.lwjgl.opengl.GL11;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map;
 import java.util.HashMap;
 
@@ -24,9 +25,32 @@ public class LevelRenderer implements LevelListener {
    private int yChunks;
    private int zChunks;
    private Textures textures;
-    // === Multithreaded meshing infra ===
-   private static final ExecutorService MESH_POOL =
-         Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+   
+   // === Multithreaded meshing infra ===
+   private static final ThreadFactory MESH_TF = new ThreadFactory() {
+      private final ThreadFactory backing = Executors.defaultThreadFactory();
+      private final AtomicInteger idx = new AtomicInteger(1);
+      public Thread newThread(Runnable r) {
+         Thread t = backing.newThread(r);
+         t.setName("mesh-" + idx.getAndIncrement());
+         t.setDaemon(false); // visible in process/thread tools
+         return t;
+      }
+   };
+
+   // Pool size: default = number of logical CPUs, but overridable with -Dmesh.threads=N
+   private static final int MESH_THREADS = Math.max(
+         2,
+         Integer.getInteger("mesh.threads", Runtime.getRuntime().availableProcessors())
+   );
+
+   // Use a fixed pool so thread count is stable and visible. Prestart so threads exist immediately.
+   private static final ThreadPoolExecutor MESH_POOL =
+         (ThreadPoolExecutor) Executors.newFixedThreadPool(MESH_THREADS, MESH_TF);
+   static {
+      MESH_POOL.prestartAllCoreThreads();
+      System.out.println("[LevelRenderer] MESH_POOL threads=" + MESH_THREADS);
+   }
 
    private final Map<Chunk, Future<Tesselator.MeshData[]>> inflight =
       new HashMap<Chunk, Future<Tesselator.MeshData[]>>();
@@ -41,7 +65,7 @@ public class LevelRenderer implements LevelListener {
    // and how many remain to be uploaded at least once.
    private int initialDirtyTotal = 0;
    private int initialDirtyRemaining = 0;
-   private static final int MAX_NEW_SUBMITS_PER_FRAME = 24; // how many new jobs we kick each frame
+   private static final int MAX_NEW_SUBMITS_PER_FRAME = 256; // how many new jobs we kick each frame
    // ====================================
 
    public LevelRenderer(Level level, Textures textures) {
@@ -122,6 +146,21 @@ public class LevelRenderer implements LevelListener {
       GL11.glDisable(3553);
    }
 
+   private static void logLiveThreadsOnce() {
+      try {
+         java.lang.management.ThreadMXBean mx = java.lang.management.ManagementFactory.getThreadMXBean();
+         int live = mx.getThreadCount();
+         System.out.println("[LevelRenderer] Live JVM threads=" + live);
+         // List mesh threads specifically
+         for (Thread t : Thread.getAllStackTraces().keySet()) {
+            String n = t.getName();
+            if (n.startsWith("mesh-")) {
+               System.out.println("  -> " + n + " state=" + t.getState());
+            }
+         }
+      } catch (Throwable ignore) {}
+   }
+
  public void updateDirtyChunks(Player player) {
       // 1) First, collect any finished jobs and upload them on the render thread
       if (!inflight.isEmpty()) {
@@ -158,6 +197,7 @@ public class LevelRenderer implements LevelListener {
       // Start stopwatch the first time we detect any dirty chunks.
       // Capture the count *once* so we don't depend on later list recomputations.
       if (!initialBuildStarted && dirty != null && !dirty.isEmpty()) {
+         logLiveThreadsOnce();
          initialBuildStarted = true;
          initialBuildFinished = false;
          initialDirtyTotal = dirty.size();
@@ -204,7 +244,6 @@ public class LevelRenderer implements LevelListener {
                }
             });
 
-         inflight.put(target, fut);
          inflight.put(target, fut);
          inflightStartNanos.put(target, Long.valueOf(System.nanoTime()));
          // (Optional) your profiling counters:
