@@ -117,7 +117,7 @@ public class Minecraft implements Runnable {
       GL11.glLoadIdentity();
       GL11.glMatrixMode(5888);
       this.checkGlError("Startup");
-      this.level = new Level(1024, 1024, 74);
+      this.level = new Level(1024, 1024, 64);
       this.levelRenderer = new LevelRenderer(this.level, this.textures);
       this.player = new Player(this.level);
       this.particleEngine = new ParticleEngine(this.level, this.textures);
