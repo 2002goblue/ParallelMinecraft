@@ -636,7 +636,7 @@ public class Minecraft implements Runnable {
    }
 
    public static void main(String[] args) throws LWJGLException {
-      Minecraft minecraft = new Minecraft((Canvas)null, 854, 480, true);
+      Minecraft minecraft = new Minecraft((Canvas)null, 854, 480, false);
       (new Thread(minecraft)).start();
    }
 }
