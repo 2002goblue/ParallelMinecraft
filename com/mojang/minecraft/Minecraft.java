@@ -61,11 +61,11 @@ public class Minecraft implements Runnable {
    private HitResult hitResult = null;
    FloatBuffer lb = BufferUtils.createFloatBuffer(16);
    private long startupTime = 0;
-   private boolean initialChunksLoaded = false;
-   private long duration;
+   private boolean initDone = false;
+   private long initDuration;
    private int dirtyChunkCount;
    private List dirtyList;
-   private String durationStatus = "in progress";
+   private String initDurationStatus = "in progress";
    private long initFrames = 0;
    private float avgFps;
    private String avgFpsStatus = "in progress";
@@ -219,7 +219,7 @@ public class Minecraft implements Runnable {
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
                   this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates, ";
-                  this.initString = "Init time: " + durationStatus + ", Dirty Chunks: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFpsStatus;
+                  this.initString = "Init time: " + initDurationStatus + ", Dirty Chunks: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFpsStatus;
                   Chunk.updates = 0;
                   lastTime += 1000L;
                   frames = 0;
@@ -475,7 +475,7 @@ public class Minecraft implements Runnable {
    }
 
    public void render(float a) {
-      if (!initialChunksLoaded) {
+      if (!initDone) {
         initFrames++;
       }
       if (!Display.isActive()) {
@@ -509,19 +509,19 @@ public class Minecraft implements Runnable {
       Frustum frustum = Frustum.getFrustum();
       this.levelRenderer.updateDirtyChunks(this.player);
       
-      if (!initialChunksLoaded && this.startupTime != 0) {
+      if (!initDone && this.startupTime != 0) {
         // getAllDirtyChunks returns null when the list is empty
         dirtyList = this.levelRenderer.getAllDirtyChunks();
 
         dirtyChunkCount = (dirtyList != null) ? dirtyList.size() : 0;  
 
         if (dirtyChunkCount == 0) {    
-            initialChunksLoaded = true;
-            duration = System.currentTimeMillis() - this.startupTime;
-            durationStatus = Long.toString(duration);
+            initDone = true;
+            initDuration = System.currentTimeMillis() - this.startupTime;
+            initDurationStatus = Long.toString(initDuration);
 
-            if (duration > 0) {
-                avgFps = (float) initFrames / ((float) duration / 1000f);
+            if (initDuration > 0) {
+                avgFps = (float) initFrames / ((float) initDuration / 1000f);
                 avgFpsStatus = Float.toString(avgFps);
             }
         }
