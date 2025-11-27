@@ -17,6 +17,8 @@ import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.List;
+
 import javax.swing.JOptionPane;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
@@ -57,6 +59,13 @@ public class Minecraft implements Runnable {
    private IntBuffer selectBuffer = BufferUtils.createIntBuffer(2000);
    private HitResult hitResult = null;
    FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private long startupTime = 0;
+   private boolean initialChunksLoaded = false;
+   private long duration;
+   private int dirtyChunkCount;
+   private List dirtyList;
+   private String durationStatus = "in progress";
+
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
       this.parent = parent;
@@ -142,6 +151,9 @@ public class Minecraft implements Runnable {
       }
 
       this.checkGlError("Post startup");
+
+      //Get initial time after init
+      this.startupTime = System.currentTimeMillis();
    }
 
    private void checkGlError(String string) {
@@ -202,7 +214,7 @@ public class Minecraft implements Runnable {
                ++frames;
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
-                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates";
+                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates, " + "Init time: " + durationStatus + ", Dirty Chunks: " + dirtyChunkCount;
                   Chunk.updates = 0;
                   lastTime += 1000L;
                   frames = 0;
@@ -488,6 +500,19 @@ public class Minecraft implements Runnable {
       GL11.glEnable(2884);
       Frustum frustum = Frustum.getFrustum();
       this.levelRenderer.updateDirtyChunks(this.player);
+      
+      if (!initialChunksLoaded && this.startupTime != 0) {
+        // getAllDirtyChunks returns null when the list is empty
+        dirtyList = this.levelRenderer.getAllDirtyChunks();
+
+        dirtyChunkCount = (dirtyList != null) ? dirtyList.size() : 0;  
+
+        if (dirtyChunkCount == 0) {    
+            initialChunksLoaded = true;
+            duration = System.currentTimeMillis() - this.startupTime;
+            durationStatus = Long.toString(duration);
+        }
+      }
       this.checkGlError("Update chunks");
       this.setupFog(0);
       GL11.glEnable(2912);
