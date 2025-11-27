@@ -213,14 +213,14 @@ public class Minecraft implements Runnable {
                      long ms = levelRenderer.getInitialBuildMillis();
                      // drawString("Initial build: " + ms + " ms", x, y, 0xFFFFFF);
                      this.fpsString = String.format(
-                     "%d fps, %d chunk updates, mesh %.2f ms/chunk, %d dirty pending, %d init time",
-                     frames, Chunk.updates, avgMeshMs, dirtyNow, ms
+                     "%d fps, %d chunk updates, Init time: %d, dirty pending",
+                     frames, Chunk.updates, ms, dirtyNow
                      );                    
                   } else {
 
                   this.fpsString = String.format(
-                  "%d fps, %d chunk updates, mesh %.2f ms/chunk, %d dirty pending",
-                  frames, Chunk.updates, avgMeshMs, dirtyNow
+                  "%d fps, %d chunk updates, Init time: in progress, %d dirty pending",
+                  frames, Chunk.updates, dirtyNow
                   );
                   }
 
