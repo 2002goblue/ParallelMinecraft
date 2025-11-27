@@ -54,6 +54,7 @@ public class Minecraft implements Runnable {
    private int editMode = 0;
    private volatile boolean running = false;
    private String fpsString = "";
+   private String initString = "";
    private boolean mouseGrabbed = false;
    private IntBuffer viewportBuffer = BufferUtils.createIntBuffer(16);
    private IntBuffer selectBuffer = BufferUtils.createIntBuffer(2000);
@@ -65,6 +66,9 @@ public class Minecraft implements Runnable {
    private int dirtyChunkCount;
    private List dirtyList;
    private String durationStatus = "in progress";
+   private long initFrames = 0;
+   private float avgFps;
+   private String avgFpsStatus = "in progress";
 
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
@@ -214,7 +218,8 @@ public class Minecraft implements Runnable {
                ++frames;
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
-                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates, " + "Init time: " + durationStatus + ", Dirty Chunks: " + dirtyChunkCount;
+                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates, ";
+                  this.initString = "Init time: " + durationStatus + ", Dirty Chunks: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFpsStatus;
                   Chunk.updates = 0;
                   lastTime += 1000L;
                   frames = 0;
@@ -470,6 +475,9 @@ public class Minecraft implements Runnable {
    }
 
    public void render(float a) {
+      if (!initialChunksLoaded) {
+        initFrames++;
+      }
       if (!Display.isActive()) {
          this.releaseMouse();
       }
@@ -511,6 +519,11 @@ public class Minecraft implements Runnable {
             initialChunksLoaded = true;
             duration = System.currentTimeMillis() - this.startupTime;
             durationStatus = Long.toString(duration);
+
+            if (duration > 0) {
+                avgFps = (float) initFrames / ((float) duration / 1000f);
+                avgFpsStatus = Float.toString(avgFps);
+            }
         }
       }
       this.checkGlError("Update chunks");
@@ -588,6 +601,7 @@ public class Minecraft implements Runnable {
       this.checkGlError("GUI: Draw selected");
       this.font.drawShadow("0.0.8a ", 2, 2, 16777215);
       this.font.drawShadow(this.fpsString, 2, 12, 16777215);
+      this.font.drawShadow(this.initString, 2, 22, 16777215);
       this.checkGlError("GUI: Draw text");
       int wc = screenWidth / 2;
       int hc = screenHeight / 2;
