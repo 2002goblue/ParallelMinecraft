@@ -59,13 +59,14 @@ public class Minecraft implements Runnable {
    private IntBuffer selectBuffer = BufferUtils.createIntBuffer(2000);
    private HitResult hitResult = null;
    private FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private long startupTime = 0;
+   private Boolean initDone = false;
+   private long initDuration;
+   private int dirtyChunkCount;
+   private List dirtyList; 
    private long initFrames = 0;
    private float avgFps;
-   private long initDuration;
-   private Boolean initDone = false;
-   private int dirtyNow;
-   private long startupTime = 0;
-   private List tempChunkList; 
+
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
       this.parent = parent;
@@ -216,12 +217,12 @@ public class Minecraft implements Runnable {
                   double avgMeshMs = (Chunk.meshCount == 0) ? 0.0
                   : (Chunk.meshTimeNanos / 1000000.0) / Chunk.meshCount;
 
-                  tempChunkList = this.levelRenderer.getAllDirtyChunks();
+                  dirtyList = this.levelRenderer.getAllDirtyChunks();
 
-                  dirtyNow = tempChunkList == null ? 0
-                  : tempChunkList.size();
+                  dirtyChunkCount = dirtyList == null ? 0
+                  : dirtyList.size();
                   
-                  if(dirtyNow == 0) {
+                  if(dirtyChunkCount == 0) {
                      initDone = true;
                   }
 
@@ -233,11 +234,11 @@ public class Minecraft implements Runnable {
                         avgFps = (float) initFrames / ((float) initDuration / 1000f);
                      }
 
-                     this.initString = "Init time: " + initDuration + ", Dirty Pending: " + dirtyNow + ", Avg FPS During Init: " + avgFps;    
+                     this.initString = "Init time: " + initDuration + ", Dirty Pending: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFps;    
 
                   } else {
 
-                  this.initString = "Init time: in progress, Dirty Pending: " + dirtyNow + ", Avg FPS During Init: in progress";
+                  this.initString = "Init time: in progress, Dirty Pending: " + dirtyChunkCount + ", Avg FPS During Init: in progress";
 
                   }
 
