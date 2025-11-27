@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import javax.swing.JOptionPane;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
@@ -52,11 +53,19 @@ public class Minecraft implements Runnable {
    private int editMode = 0;
    private volatile boolean running = false;
    private String fpsString = "";
+   private String initString = "";
    private boolean mouseGrabbed = false;
    private IntBuffer viewportBuffer = BufferUtils.createIntBuffer(16);
    private IntBuffer selectBuffer = BufferUtils.createIntBuffer(2000);
    private HitResult hitResult = null;
-   FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private long initFrames = 0;
+   private float avgFps;
+   private long initDuration;
+   private Boolean initDone = false;
+   private int dirtyNow;
+   private long startupTime = 0;
+   private List tempChunkList; 
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
       this.parent = parent;
@@ -142,6 +151,8 @@ public class Minecraft implements Runnable {
       }
 
       this.checkGlError("Post startup");
+
+      this.startupTime = System.currentTimeMillis();
    }
 
    private void checkGlError(String string) {
@@ -205,23 +216,29 @@ public class Minecraft implements Runnable {
                   double avgMeshMs = (Chunk.meshCount == 0) ? 0.0
                   : (Chunk.meshTimeNanos / 1000000.0) / Chunk.meshCount;
 
+                  tempChunkList = this.levelRenderer.getAllDirtyChunks();
 
-                  int dirtyNow = this.levelRenderer.getAllDirtyChunks() == null ? 0
-                  : this.levelRenderer.getAllDirtyChunks().size();
+                  dirtyNow = tempChunkList == null ? 0
+                  : tempChunkList.size();
+                  
+                  if(dirtyNow == 0) {
+                     initDone = true;
+                  }
 
-                  if (levelRenderer.hasInitialBuildFinished()) {
-                     long ms = levelRenderer.getInitialBuildMillis();
-                     // drawString("Initial build: " + ms + " ms", x, y, 0xFFFFFF);
-                     this.fpsString = String.format(
-                     "%d fps, %d chunk updates, Init time: %d, dirty pending",
-                     frames, Chunk.updates, ms, dirtyNow
-                     );                    
+                  this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates";
+
+                  if (initDone) {
+                     if(initDuration == 0) {
+                        initDuration = System.currentTimeMillis() - startupTime;
+                        avgFps = (float) initFrames / ((float) initDuration / 1000f);
+                     }
+
+                     this.initString = "Init time: " + initDuration + ", Dirty Pending: " + dirtyNow + ", Avg FPS During Init: " + avgFps;    
+
                   } else {
 
-                  this.fpsString = String.format(
-                  "%d fps, %d chunk updates, Init time: in progress, %d dirty pending",
-                  frames, Chunk.updates, dirtyNow
-                  );
+                  this.initString = "Init time: in progress, Dirty Pending: " + dirtyNow + ", Avg FPS During Init: in progress";
+
                   }
 
                   Chunk.updates = 0;
@@ -481,6 +498,10 @@ public class Minecraft implements Runnable {
    }
 
    public void render(float a) {
+      if (!initDone) {
+         initFrames++;
+      }
+
       if (!Display.isActive()) {
          this.releaseMouse();
       }
@@ -586,6 +607,7 @@ public class Minecraft implements Runnable {
       this.checkGlError("GUI: Draw selected");
       this.font.drawShadow("0.0.8a ", 2, 2, 16777215);
       this.font.drawShadow(this.fpsString, 2, 12, 16777215);
+      this.font.drawShadow(this.initString, 2, 22, 16777215);
       this.checkGlError("GUI: Draw text");
       int wc = screenWidth / 2;
       int hc = screenHeight / 2;
