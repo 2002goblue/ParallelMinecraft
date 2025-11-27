@@ -65,8 +65,8 @@ public class Chunk {
    }
 
     // Worker-thread: build MeshData for one layer (no GL calls here!)
-   public com.mojang.minecraft.renderer.Tesselator.MeshData buildMeshData(int layer) {
-      com.mojang.minecraft.renderer.Tesselator workerTess = TL_TESS.get();
+   public Tesselator.MeshData buildMeshData(int layer) {
+      Tesselator workerTess = TL_TESS.get();
       workerTess.init();
       int tiles = 0;
 
@@ -75,7 +75,7 @@ public class Chunk {
             for (int z = this.z0; z < this.z1; ++z) {
                int tileId = this.level.getTile(x, y, z);
                if (tileId > 0) {
-                  com.mojang.minecraft.level.tile.Tile.tiles[tileId].render(workerTess, this.level, layer, x, y, z);
+                  Tile.tiles[tileId].render(workerTess, this.level, layer, x, y, z);
                   ++tiles;
                }
             }
@@ -84,7 +84,7 @@ public class Chunk {
       return workerTess.snapshot();
    }
 
-   public void uploadMeshDataToDisplayList(com.mojang.minecraft.renderer.Tesselator.MeshData md, int layer) {
+   public void uploadMeshDataToDisplayList(Tesselator.MeshData md, int layer) {
       org.lwjgl.opengl.GL11.glNewList(this.lists + layer, 4864 /* GL_COMPILE */);
       md.emitToGL();
       org.lwjgl.opengl.GL11.glEndList();
