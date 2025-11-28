@@ -26,41 +26,53 @@ public class LevelRenderer implements LevelListener {
    private int zChunks;
    private Textures textures;
    
-   // === Multithreaded meshing infra ===
+   // Thread factory for creating new threads
    private static final ThreadFactory MESH_TF = new ThreadFactory() {
+      // Using Java's default thread factory setup 
       private final ThreadFactory backing = Executors.defaultThreadFactory();
+
+      // Atomic variable for assigning mesh names
       private final AtomicInteger idx = new AtomicInteger(1);
+
+      // Function when a new thread is created
       public Thread newThread(Runnable r) {
-         Thread t = backing.newThread(r);
-         t.setName("mesh-" + idx.getAndIncrement());
-         t.setDaemon(false); // visible in process/thread tools
+         Thread t = backing.newThread(r); // Use the default java backing to get a new thread
+         t.setName("mesh-" + idx.getAndIncrement()); // Assign the name and update the atomic variable by one
+         t.setDaemon(false); // Set to a user thread since it is performing main tasks
          return t;
       }
    };
 
-   // Pool size: default = number of logical CPUs, but overridable with -Dmesh.threads=N
+   // Pool size: default = number of logical CPUs
    private static final int MESH_THREADS = Math.max(
          2,
          Integer.getInteger("mesh.threads", Runtime.getRuntime().availableProcessors())
    );
 
-   // Use a fixed pool so thread count is stable and visible. Prestart so threads exist immediately.
-   private static final ThreadPoolExecutor MESH_POOL =
-         (ThreadPoolExecutor) Executors.newFixedThreadPool(MESH_THREADS, MESH_TF);
+   // The thread pool is fixed, so it is limited to our MESH_THREADS variable amount of threads
+   // If we hit the limit, tasks will wait for a thread to open up
+   // We pass our factory to this function to define how new threads are created
+   private static final ThreadPoolExecutor MESH_POOL = (ThreadPoolExecutor) Executors.newFixedThreadPool(MESH_THREADS, MESH_TF);
+
+   // We run this once when the code enters memory
    static {
+      // Prestart so threads exist immediately.
       MESH_POOL.prestartAllCoreThreads();
-      System.out.println("[LevelRenderer] MESH_POOL threads=" + MESH_THREADS);
+      System.out.println("MESH_POOL threads=" + MESH_THREADS);
    }
 
    private final Map<Chunk, Future<Tesselator.MeshData[]>> inflight =
       new HashMap<Chunk, Future<Tesselator.MeshData[]>>();
+
    private final Map<Chunk, Long> inflightStartNanos =
       new HashMap<Chunk, Long>();
+
    // === Initial build stopwatch ===
    private boolean initialBuildStarted = false;
    private boolean initialBuildFinished = false;
    private long initialBuildStartNanos = 0L;
    private long initialBuildEndNanos = 0L;
+   
    // Tracks how many chunks were dirty at the moment we started timing,
    // and how many remain to be uploaded at least once.
    private int initialDirtyTotal = 0;
