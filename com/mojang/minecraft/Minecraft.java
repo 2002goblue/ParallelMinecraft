@@ -42,7 +42,7 @@ public class Minecraft implements Runnable {
    private Player player;
    private int paintTexture = 1;
    private ParticleEngine particleEngine;
-   private ArrayList entities = new ArrayList();
+   private ArrayList<Entity> entities = new ArrayList<Entity>();
    private Canvas parent;
    public boolean appletMode = false;
    public volatile boolean pause = false;
@@ -63,7 +63,7 @@ public class Minecraft implements Runnable {
    private Boolean initDone = false;
    private long initDuration;
    private int dirtyChunkCount;
-   private List dirtyList; 
+   private List<Chunk> dirtyList; 
    private long initFrames = 0;
    private float avgFps;
    private long postInitFrames = 0;
@@ -217,8 +217,6 @@ public class Minecraft implements Runnable {
                ++frames;
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
-                  double avgMeshMs = (Chunk.meshCount == 0) ? 0.0
-                  : (Chunk.meshTimeNanos / 1000000.0) / Chunk.meshCount;
 
                   dirtyList = this.levelRenderer.getAllDirtyChunks();
 

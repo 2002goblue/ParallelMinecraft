@@ -114,14 +114,14 @@ public class LevelRenderer implements LevelListener {
       return (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
    }
 
-   public List getAllDirtyChunks() {
-      ArrayList dirty = null;
+   public List<Chunk> getAllDirtyChunks() {
+      ArrayList<Chunk> dirty = null;
 
       for(int i = 0; i < this.chunks.length; ++i) {
          Chunk chunk = this.chunks[i];
          if (chunk.isDirty()) {
             if (dirty == null) {
-               dirty = new ArrayList();
+               dirty = new ArrayList<Chunk>();
             }
 
             dirty.add(chunk);
@@ -166,8 +166,8 @@ public class LevelRenderer implements LevelListener {
                   futureForChunk.getKey().uploadMeshDataToDisplayList(layers[0], 0);
                   futureForChunk.getKey().uploadMeshDataToDisplayList(layers[1], 1);
                   futureForChunk.getKey().markClean(); // mark clean after upload
-                  Long started = inflightStartNanos.remove(futureForChunk.getKey());
-                  
+                  inflightStartNanos.remove(futureForChunk.getKey());
+
                   // Count this chunk as done for the initial wave (once).
                   if (initialBuildStarted && !initialBuildFinished && initialDirtyRemaining > 0) {
                      initialDirtyRemaining--;
@@ -181,7 +181,7 @@ public class LevelRenderer implements LevelListener {
          for (Chunk c : finished) inflight.remove(c);
       }
 
-      List dirty = this.getAllDirtyChunks();
+      List<Chunk> dirty = this.getAllDirtyChunks();
 
       // Start stopwatch the first time we detect any dirty chunks.
       // Capture the count *once* so we don't depend on later list recomputations.
@@ -244,7 +244,7 @@ public class LevelRenderer implements LevelListener {
       // Recompute or check state after we uploaded/submitted this frame.
       // Finish when no dirty chunks remain and no jobs are inflight.
       if (initialBuildStarted && !initialBuildFinished) {
-         List dirtyAfter = this.getAllDirtyChunks();
+         List<Chunk> dirtyAfter = this.getAllDirtyChunks();
          boolean noneLeft = (dirtyAfter == null || dirtyAfter.isEmpty());
          if (noneLeft && inflight.isEmpty()) {
             initialBuildFinished = true;

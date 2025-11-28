@@ -13,13 +13,13 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 public class Level {
-   private static final int TILE_UPDATE_INTERVAL = 400;
+   //private static final int TILE_UPDATE_INTERVAL = 400;
    public final int width;
    public final int height;
    public final int depth;
    private byte[] blocks;
    private int[] lightDepths;
-   private ArrayList levelListeners = new ArrayList();
+   private ArrayList<LevelListener> levelListeners = new ArrayList<LevelListener>();
    private Random random = new Random(12345L);
    int unprocessed = 0;
 
@@ -103,8 +103,8 @@ public class Level {
       return tile == null ? false : tile.blocksLight();
    }
 
-   public ArrayList getCubes(AABB aABB) {
-      ArrayList aABBs = new ArrayList();
+   public ArrayList<AABB> getCubes(AABB aABB) {
+      ArrayList<AABB> aABBs = new ArrayList<AABB>();
       int x0 = (int)aABB.x0;
       int x1 = (int)(aABB.x1 + 1.0F);
       int y0 = (int)aABB.y0;

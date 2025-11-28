@@ -79,8 +79,6 @@ public class Chunk {
 
    private void rebuild(int layer) {
       this.dirty = false;
-      //++updates;
-      long before = System.nanoTime();
       GL11.glNewList(this.lists + layer, 4864);
       t.init();
 
@@ -97,7 +95,6 @@ public class Chunk {
 
       t.flush();
       GL11.glEndList();
-      long after = System.nanoTime();
    }
 
    public void rebuild() {
