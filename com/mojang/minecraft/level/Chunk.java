@@ -26,28 +26,17 @@ public class Chunk {
    public long dirtiedTime = 0L;
    private static Tesselator t;
    public static int updates;
-   private static long totalTime;
-   private static int totalUpdates;
-   // Timing metrics (since last HUD sample)
    public static long meshTimeNanos = 0L;
    public static int  meshCount     = 0;
 
    static {
       t = Tesselator.instance;
       updates = 0;
-      totalTime = 0L;
-      totalUpdates = 0;
    }
 
    private static final ThreadLocal<Tesselator> TL_TESS = new ThreadLocal<Tesselator>() {
       @Override protected Tesselator initialValue() { return new Tesselator(); }
    };
-
-   // Record a timing sample from outside the class (e.g., after a threaded rebuild finishes)
-   public static void addRebuildSample(long nanos) {
-      totalTime += nanos;
-      ++totalUpdates;
-   }
 
    public Chunk(Level level, int x0, int y0, int z0, int x1, int y1, int z1) {
       this.level = level;
@@ -64,19 +53,17 @@ public class Chunk {
       this.lists = GL11.glGenLists(2);
    }
 
-    // Worker-thread: build MeshData for one layer (no GL calls here!)
+
    public Tesselator.MeshData buildMeshData(int layer) {
       Tesselator workerTess = TL_TESS.get();
       workerTess.init();
-      int tiles = 0;
-
+      ++updates;
       for (int x = this.x0; x < this.x1; ++x) {
          for (int y = this.y0; y < this.y1; ++y) {
             for (int z = this.z0; z < this.z1; ++z) {
                int tileId = this.level.getTile(x, y, z);
                if (tileId > 0) {
                   Tile.tiles[tileId].render(workerTess, this.level, layer, x, y, z);
-                  ++tiles;
                }
             }
          }
@@ -92,11 +79,10 @@ public class Chunk {
 
    private void rebuild(int layer) {
       this.dirty = false;
-      ++updates;
+      //++updates;
       long before = System.nanoTime();
       GL11.glNewList(this.lists + layer, 4864);
       t.init();
-      int tiles = 0;
 
       for(int x = this.x0; x < this.x1; ++x) {
          for(int y = this.y0; y < this.y1; ++y) {
@@ -104,7 +90,6 @@ public class Chunk {
                int tileId = this.level.getTile(x, y, z);
                if (tileId > 0) {
                   Tile.tiles[tileId].render(t, this.level, layer, x, y, z);
-                  ++tiles;
                }
             }
          }
@@ -113,11 +98,6 @@ public class Chunk {
       t.flush();
       GL11.glEndList();
       long after = System.nanoTime();
-      if (tiles > 0) {
-         totalTime += after - before;
-         ++totalUpdates;
-      }
-
    }
 
    public void rebuild() {

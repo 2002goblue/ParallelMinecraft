@@ -151,42 +151,31 @@ public class LevelRenderer implements LevelListener {
          java.lang.management.ThreadMXBean mx = java.lang.management.ManagementFactory.getThreadMXBean();
          int live = mx.getThreadCount();
          System.out.println("[LevelRenderer] Live JVM threads=" + live);
-         // List mesh threads specifically
-         for (Thread t : Thread.getAllStackTraces().keySet()) {
-            String n = t.getName();
-            if (n.startsWith("mesh-")) {
-               System.out.println("  -> " + n + " state=" + t.getState());
-            }
-         }
       } catch (Throwable ignore) {}
    }
 
  public void updateDirtyChunks(Player player) {
-      // 1) First, collect any finished jobs and upload them on the render thread
       if (!inflight.isEmpty()) {
          ArrayList<Chunk> finished = new ArrayList<Chunk>();
-         for (Map.Entry<Chunk, Future<com.mojang.minecraft.renderer.Tesselator.MeshData[]>> e : inflight.entrySet()) {
-            Future<com.mojang.minecraft.renderer.Tesselator.MeshData[]> f = e.getValue();
-            if (f.isDone()) {
+         for (Map.Entry<Chunk, Future<Tesselator.MeshData[]>> futureForChunk : inflight.entrySet()) {
+            Future<Tesselator.MeshData[]> currentFuture = futureForChunk.getValue();
+            if (currentFuture.isDone()) {
                try {
-                  Tesselator.MeshData[] layers = f.get();
+                  Tesselator.MeshData[] layers = currentFuture.get();
                   // Compile display lists on RENDER THREAD ONLY:
-                  e.getKey().uploadMeshDataToDisplayList(layers[0], 0);
-                  e.getKey().uploadMeshDataToDisplayList(layers[1], 1);
-                  e.getKey().markClean(); // mark clean after upload
-                  Long started = inflightStartNanos.remove(e.getKey());
-                  if (started != null) {
-                        long dt = System.nanoTime() - started.longValue();
-                        Chunk.addRebuildSample(dt);
-                  }
+                  futureForChunk.getKey().uploadMeshDataToDisplayList(layers[0], 0);
+                  futureForChunk.getKey().uploadMeshDataToDisplayList(layers[1], 1);
+                  futureForChunk.getKey().markClean(); // mark clean after upload
+                  Long started = inflightStartNanos.remove(futureForChunk.getKey());
+                  
                   // Count this chunk as done for the initial wave (once).
                   if (initialBuildStarted && !initialBuildFinished && initialDirtyRemaining > 0) {
                      initialDirtyRemaining--;
                   }
                } catch (Exception ex) {
-                  ex.printStackTrace(); // if something failed, keep it dirty
+                  ex.printStackTrace();
                }
-               finished.add(e.getKey());
+               finished.add(futureForChunk.getKey());
             }
          }
          for (Chunk c : finished) inflight.remove(c);
