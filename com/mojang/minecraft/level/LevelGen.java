@@ -7,7 +7,7 @@ public class LevelGen {
    private int width;
    private int height;
    private int depth;
-   private Random random = new Random();
+   private Random random = new Random(12345L);
 
    public LevelGen(int width, int height, int depth) {
       this.width = width;
