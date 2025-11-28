@@ -69,6 +69,9 @@ public class Minecraft implements Runnable {
    private long initFrames = 0;
    private float avgFps;
    private String avgFpsStatus = "in progress";
+   private long postInitFrames = 0;
+   private float avgPostInitFps;
+   private long initEndTime;
 
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
@@ -477,6 +480,14 @@ public class Minecraft implements Runnable {
    public void render(float a) {
       if (!initDone) {
         initFrames++;
+      } else {
+         if(System.currentTimeMillis() - initEndTime > 10000) {
+            avgPostInitFps = postInitFrames / ((System.currentTimeMillis() - initEndTime)/1000);
+            initEndTime = System.currentTimeMillis();
+            System.out.println("Avg FPS During 10s After Init: " + Float.toString(avgPostInitFps));
+         } else {
+            postInitFrames++;
+         }
       }
       if (!Display.isActive()) {
          this.releaseMouse();
@@ -517,7 +528,8 @@ public class Minecraft implements Runnable {
 
         if (dirtyChunkCount == 0) {    
             initDone = true;
-            initDuration = System.currentTimeMillis() - this.startupTime;
+            initEndTime = System.currentTimeMillis();
+            initDuration = initEndTime - this.startupTime;
             initDurationStatus = Long.toString(initDuration);
 
             if (initDuration > 0) {
