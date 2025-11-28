@@ -232,6 +232,7 @@ public class Minecraft implements Runnable {
                      if(initDuration == 0) {
                         initDuration = System.currentTimeMillis() - startupTime;
                         avgFps = (float) initFrames / ((float) initDuration / 1000f);
+                        System.out.println("[Minecraft] Initialization average fps: " + avgFps);
                      }
 
                      this.initString = "Init time: " + initDuration + ", Dirty Pending: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFps;    
