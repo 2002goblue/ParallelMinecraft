@@ -11,7 +11,7 @@ public class Player extends Entity {
    @Override
    protected void resetPos() {
       float x = 512.2f;
-      float y = (float)(this.level.depth + 10);
+      float y = (float)(this.level.depth - 16);
       float z = 512.2f;
       this.setPos(x, y, z);
    }

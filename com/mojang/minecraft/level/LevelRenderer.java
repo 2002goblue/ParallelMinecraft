@@ -218,8 +218,8 @@ public class LevelRenderer implements LevelListener {
          }
       }
 
-// We do not return early here; we want to allow "finish" detection even if dirty is empty now.
-// (Submissions may have happened in prior frames; we need to check inflight emptiness below.)
+      // We do not return early here; we want to allow "finish" detection even if dirty is empty now.
+      // (Submissions may have happened in prior frames; we need to check inflight emptiness below.)
 
       // Safe sort: only when we have 2+ items and a non-null frustum & player
       Frustum fr = Frustum.getFrustum();
@@ -416,10 +416,13 @@ public class LevelRenderer implements LevelListener {
    }
 
    public void tileChanged(int x, int y, int z) {
+      int tileId = this.level.getTile(x,y,z);
+      System.out.println("TILECHANGE: " + Integer.toString(x) + " "  + Integer.toString(y) + " " + Integer.toString(z) + "TILEID: " + Integer.toString(tileId));
       this.setDirty(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
    }
 
    public void lightColumnChanged(int x, int z, int y0, int y1) {
+      System.out.println("LIGHTCHANGE: " + Integer.toString(x) +  " " + Integer.toString(z));
       this.setDirty(x - 1, y0 - 1, z - 1, x + 1, y1 + 1, z + 1);
    }
 
