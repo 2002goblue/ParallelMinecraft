@@ -94,7 +94,7 @@ public class LevelRenderer implements LevelListener {
    public void updateDirtyChunks(Player player) {
       List dirty = this.getAllDirtyChunks();
       if (dirty != null) {
-         Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
+         //Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
 
          for(int i = 0; i < 8 && i < dirty.size(); ++i) {
             ((Chunk)dirty.get(i)).rebuild();

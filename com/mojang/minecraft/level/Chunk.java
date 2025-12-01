@@ -67,6 +67,24 @@ public class Chunk {
             }
          }
       }
+      
+       try {
+         // Append to chunk_log.txt
+         java.io.FileWriter fw = new java.io.FileWriter("chunk_log.txt", true);
+         java.io.PrintWriter pw = new java.io.PrintWriter(fw);
+         
+         // Format: X Y Z TIME
+         pw.println(
+            Float.toString((this.x0 >> 4)) + " " + 
+            Float.toString((this.y0 >> 4)) + " " + 
+            Float.toString((this.z0 >> 4)) + " " + 
+            Long.toString(System.currentTimeMillis())
+         );
+         
+         pw.close();
+      } catch (Exception e) {
+         e.printStackTrace();
+      }
 
       t.flush();
       GL11.glEndList();

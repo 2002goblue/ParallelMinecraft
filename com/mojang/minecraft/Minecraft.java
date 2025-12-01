@@ -139,11 +139,11 @@ public class Minecraft implements Runnable {
       this.particleEngine = new ParticleEngine(this.level, this.textures);
       this.font = new Font("/default.gif", this.textures);
 
-      for(int i = 0; i < 10; ++i) {
-         Zombie zombie = new Zombie(this.level, this.textures, 128.0F, 0.0F, 128.0F);
-         zombie.resetPos();
-         this.entities.add(zombie);
-      }
+      // for(int i = 0; i < 10; ++i) {
+      //    Zombie zombie = new Zombie(this.level, this.textures, 128.0F, 0.0F, 128.0F);
+      //    zombie.resetPos();
+      //    this.entities.add(zombie);
+      // }
 
       IntBuffer imgData = BufferUtils.createIntBuffer(256);
       imgData.clear().limit(256);
