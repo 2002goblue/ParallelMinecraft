@@ -133,4 +133,63 @@ public class Tesselator {
    public void noColor() {
       this.noColor = true;
    }
+
+   // === BEGIN: thread-safe mesh snapshot & helpers ===
+   public static final class MeshData {
+      // interleaved array and metadata captured from a Tesselator
+      public final float[] array;
+      public final int p;           // number of floats used
+      public final int vertices;    // vertex count
+      public final boolean hasTex;
+      public final boolean hasColor;
+      public final int len;         // stride floats per vertex (3, 5, 6, or 8)
+
+      public MeshData(float[] array, int p, int vertices, boolean hasTex, boolean hasColor, int len) {
+         this.array = array;
+         this.p = p;
+         this.vertices = vertices;
+         this.hasTex = hasTex;
+         this.hasColor = hasColor;
+         this.len = len;
+      }
+
+      // Render-thread only: issues GL calls to draw the captured mesh once
+      public void emitToGL() {
+         if (vertices <= 0) return;
+         java.nio.FloatBuffer buf = org.lwjgl.BufferUtils.createFloatBuffer(p);
+         buf.put(array, 0, p).flip();
+
+         // Choose the right interleaved layout
+         if (hasTex && hasColor) {
+            org.lwjgl.opengl.GL11.glInterleavedArrays(10794 /* GL_T2F_C3F_V3F */, 0, buf);
+         } else if (hasTex) {
+            org.lwjgl.opengl.GL11.glInterleavedArrays(10791 /* GL_T2F_V3F */, 0, buf);
+         } else if (hasColor) {
+            org.lwjgl.opengl.GL11.glInterleavedArrays(10788 /* GL_C3F_V3F */, 0, buf);
+         } else {
+            org.lwjgl.opengl.GL11.glInterleavedArrays(10785 /* GL_V3F */, 0, buf);
+         }
+
+         org.lwjgl.opengl.GL11.glEnableClientState(32884 /* GL_VERTEX_ARRAY */);
+         if (hasTex)   org.lwjgl.opengl.GL11.glEnableClientState(32888 /* GL_TEXTURE_COORD_ARRAY */);
+         if (hasColor) org.lwjgl.opengl.GL11.glEnableClientState(32886 /* GL_COLOR_ARRAY */);
+
+         org.lwjgl.opengl.GL11.glDrawArrays(7 /* GL_QUADS */, 0, vertices);
+
+         if (hasColor) org.lwjgl.opengl.GL11.glDisableClientState(32886);
+         if (hasTex)   org.lwjgl.opengl.GL11.glDisableClientState(32888);
+         org.lwjgl.opengl.GL11.glDisableClientState(32884);
+      }
+   }
+
+   // Worker-thread safe: capture the current contents without issuing any GL
+   public MeshData snapshot() {
+      // copy only the used portion
+      float[] copy = new float[this.p];
+      System.arraycopy(this.array, 0, copy, 0, this.p);
+      return new MeshData(copy, this.p, this.vertices, this.hasTexture, this.hasColor, this.len);
+   }
+   // === END: thread-safe mesh snapshot & helpers ===
+   
+   
 }

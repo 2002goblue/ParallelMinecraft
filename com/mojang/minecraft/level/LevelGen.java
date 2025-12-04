@@ -7,7 +7,7 @@ public class LevelGen {
    private int width;
    private int height;
    private int depth;
-   private Random random = new Random();
+   private Random random = new Random(12345L);
 
    public LevelGen(int width, int height, int depth) {
       this.width = width;
@@ -43,7 +43,7 @@ public class LevelGen {
                   dh = dh2;
                }
 
-               dh = dh / 8 + d / 3;
+               dh = dh / 16 + d / 3;
                int rh = rockMap[x + z * this.width] / 8 + d / 3;
                if (rh > dh - 2) {
                   rh = dh - 2;

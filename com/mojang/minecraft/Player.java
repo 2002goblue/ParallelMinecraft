@@ -8,6 +8,13 @@ public class Player extends Entity {
       super(level);
       this.heightOffset = 1.62F;
    }
+   @Override
+   protected void resetPos() {
+      float x = 512.2f;
+      float y = (float)(this.level.depth - 16);
+      float z = 512.2f;
+      this.setPos(x, y, z);
+   }
 
    public void tick() {
       this.xo = this.x;

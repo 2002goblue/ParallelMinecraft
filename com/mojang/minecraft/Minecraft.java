@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.List;
 import javax.swing.JOptionPane;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.LWJGLException;
@@ -41,7 +42,7 @@ public class Minecraft implements Runnable {
    private Player player;
    private int paintTexture = 1;
    private ParticleEngine particleEngine;
-   private ArrayList entities = new ArrayList();
+   private ArrayList<Entity> entities = new ArrayList<Entity>();
    private Canvas parent;
    public boolean appletMode = false;
    public volatile boolean pause = false;
@@ -52,11 +53,23 @@ public class Minecraft implements Runnable {
    private int editMode = 0;
    private volatile boolean running = false;
    private String fpsString = "";
+   private String initString = "";
    private boolean mouseGrabbed = false;
    private IntBuffer viewportBuffer = BufferUtils.createIntBuffer(16);
    private IntBuffer selectBuffer = BufferUtils.createIntBuffer(2000);
    private HitResult hitResult = null;
-   FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private FloatBuffer lb = BufferUtils.createFloatBuffer(16);
+   private long startupTime = 0;
+   private Boolean initDone = false;
+   private long initDuration;
+   private int dirtyChunkCount;
+   private List<Chunk> dirtyList; 
+   private long initFrames = 0;
+   private float avgFps;
+   private long postInitFrames = 0;
+   private float avgPostInitFps;
+   private long initEndTime;
+
 
    public Minecraft(Canvas parent, int width, int height, boolean fullscreen) {
       this.parent = parent;
@@ -123,11 +136,11 @@ public class Minecraft implements Runnable {
       this.particleEngine = new ParticleEngine(this.level, this.textures);
       this.font = new Font("/default.gif", this.textures);
 
-      for(int i = 0; i < 10; ++i) {
-         Zombie zombie = new Zombie(this.level, this.textures, 128.0F, 0.0F, 128.0F);
-         zombie.resetPos();
-         this.entities.add(zombie);
-      }
+      // for(int i = 0; i < 10; ++i) {
+      //    Zombie zombie = new Zombie(this.level, this.textures, 128.0F, 0.0F, 128.0F);
+      //    zombie.resetPos();
+      //    this.entities.add(zombie);
+      // }
 
       IntBuffer imgData = BufferUtils.createIntBuffer(256);
       imgData.clear().limit(256);
@@ -142,6 +155,8 @@ public class Minecraft implements Runnable {
       }
 
       this.checkGlError("Post startup");
+
+      this.startupTime = System.currentTimeMillis();
    }
 
    private void checkGlError(String string) {
@@ -202,8 +217,37 @@ public class Minecraft implements Runnable {
                ++frames;
 
                while(System.currentTimeMillis() >= lastTime + 1000L) {
+
+                  dirtyList = this.levelRenderer.getAllDirtyChunks();
+
+                  dirtyChunkCount = dirtyList == null ? 0
+                  : dirtyList.size();
+                  
+                  if(dirtyChunkCount == 0) {
+                     initDone = true;
+                  }
+
                   this.fpsString = frames + " fps, " + Chunk.updates + " chunk updates";
+
+                  if (initDone) {
+                     if(initDuration == 0) {
+                        initEndTime = System.currentTimeMillis();
+                        initDuration = initEndTime - startupTime;
+                        avgFps = (float) initFrames / ((float) initDuration / 1000f);
+                        System.out.println("[Minecraft] Initialization average fps: " + avgFps);
+                     }
+
+                     this.initString = "Init time: " + initDuration + ", Dirty Pending: " + dirtyChunkCount + ", Avg FPS During Init: " + avgFps;    
+
+                  } else {
+
+                  this.initString = "Init time: in progress, Dirty Pending: " + dirtyChunkCount + ", Avg FPS During Init: in progress";
+
+                  }
+
                   Chunk.updates = 0;
+                  Chunk.meshTimeNanos = 0L;
+                  Chunk.meshCount = 0;
                   lastTime += 1000L;
                   frames = 0;
                }
@@ -458,6 +502,18 @@ public class Minecraft implements Runnable {
    }
 
    public void render(float a) {
+      if (!initDone) {
+        initFrames++;
+      } else {
+         if(System.currentTimeMillis() - initEndTime > 10000) {
+            avgPostInitFps = postInitFrames / ((System.currentTimeMillis() - initEndTime)/1000);
+            initEndTime = System.currentTimeMillis();
+            System.out.println("Avg FPS During 10s After Init: " + Float.toString(avgPostInitFps));
+         } else {
+            postInitFrames++;
+         }
+      }
+
       if (!Display.isActive()) {
          this.releaseMouse();
       }
@@ -563,6 +619,7 @@ public class Minecraft implements Runnable {
       this.checkGlError("GUI: Draw selected");
       this.font.drawShadow("0.0.8a ", 2, 2, 16777215);
       this.font.drawShadow(this.fpsString, 2, 12, 16777215);
+      this.font.drawShadow(this.initString, 2, 22, 16777215);
       this.checkGlError("GUI: Draw text");
       int wc = screenWidth / 2;
       int hc = screenHeight / 2;

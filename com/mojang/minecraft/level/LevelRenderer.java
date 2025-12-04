@@ -11,6 +11,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.lwjgl.opengl.GL11;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Map;
+import java.util.HashMap;
 
 public class LevelRenderer implements LevelListener {
    public static final int MAX_REBUILDS_PER_FRAME = 8;
@@ -21,6 +25,60 @@ public class LevelRenderer implements LevelListener {
    private int yChunks;
    private int zChunks;
    private Textures textures;
+   
+   // Thread factory for creating new threads
+   private static final ThreadFactory MESH_TF = new ThreadFactory() {
+      // Using Java's default thread factory setup 
+      private final ThreadFactory backing = Executors.defaultThreadFactory();
+
+      // Atomic variable for assigning mesh names
+      private final AtomicInteger idx = new AtomicInteger(1);
+
+      // Function when a new thread is created
+      public Thread newThread(Runnable r) {
+         Thread t = backing.newThread(r); // Use the default java backing to get a new thread
+         t.setName("mesh-" + idx.getAndIncrement()); // Assign the name and update the atomic variable by one
+         t.setDaemon(false); // Set to a user thread since it is performing main tasks
+         return t;
+      }
+   };
+
+   // Pool size: default = number of logical CPUs
+   private static final int MESH_THREADS = Math.max(
+         2,
+         Integer.getInteger("mesh.threads", Runtime.getRuntime().availableProcessors())
+   );
+
+   // The thread pool is fixed, so it is limited to our MESH_THREADS variable amount of threads
+   // If we hit the limit, tasks will wait for a thread to open up
+   // We pass our factory to this function to define how new threads are created
+   private static final ThreadPoolExecutor MESH_POOL = (ThreadPoolExecutor) Executors.newFixedThreadPool(MESH_THREADS, MESH_TF);
+
+   // We run this once when the code enters memory
+   static {
+      // Prestart so threads exist immediately.
+      MESH_POOL.prestartAllCoreThreads();
+      System.out.println("MESH_POOL threads=" + MESH_THREADS);
+   }
+
+   private final Map<Chunk, Future<Tesselator.MeshData[]>> chunkUpdateFutures =
+      new HashMap<Chunk, Future<Tesselator.MeshData[]>>();
+
+   private final Map<Chunk, Long> chunkUpdateFuturesStartNanos =
+      new HashMap<Chunk, Long>();
+
+   // === Initial build stopwatch ===
+   private boolean initialBuildStarted = false;
+   private boolean initialBuildFinished = false;
+   private long initialBuildStartNanos = 0L;
+   private long initialBuildEndNanos = 0L;
+   
+   // Tracks how many chunks were dirty at the moment we started timing,
+   // and how many remain to be uploaded at least once.
+   private int initialDirtyTotal = 0;
+   private int initialDirtyRemaining = 0;
+   private static final int MAX_NEW_SUBMITS_PER_FRAME = 256; // how many new jobs we kick each frame
+   // ====================================
 
    public LevelRenderer(Level level, Textures textures) {
       this.level = level;
@@ -59,14 +117,23 @@ public class LevelRenderer implements LevelListener {
 
    }
 
-   public List getAllDirtyChunks() {
-      ArrayList dirty = null;
+   public boolean hasInitialBuildFinished() {
+      return initialBuildFinished;
+   }
+
+   public long getInitialBuildMillis() {
+      if (!initialBuildFinished) return -1L;
+      return (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+   }
+
+   public List<Chunk> getAllDirtyChunks() {
+      ArrayList<Chunk> dirty = null;
 
       for(int i = 0; i < this.chunks.length; ++i) {
          Chunk chunk = this.chunks[i];
          if (chunk.isDirty()) {
             if (dirty == null) {
-               dirty = new ArrayList();
+               dirty = new ArrayList<Chunk>();
             }
 
             dirty.add(chunk);
@@ -91,15 +158,112 @@ public class LevelRenderer implements LevelListener {
       GL11.glDisable(3553);
    }
 
-   public void updateDirtyChunks(Player player) {
-      List dirty = this.getAllDirtyChunks();
-      if (dirty != null) {
-         Collections.sort(dirty, new DirtyChunkSorter(player, Frustum.getFrustum()));
+   private static void logLiveThreadsOnce() {
+      try {
+         java.lang.management.ThreadMXBean mx = java.lang.management.ManagementFactory.getThreadMXBean();
+         int live = mx.getThreadCount();
+         System.out.println("[LevelRenderer] Live JVM threads=" + live);
+      } catch (Throwable ignore) {}
+   }
 
-         for(int i = 0; i < 8 && i < dirty.size(); ++i) {
-            ((Chunk)dirty.get(i)).rebuild();
+ public void updateDirtyChunks(Player player) {
+      if (!chunkUpdateFutures.isEmpty()) {
+         ArrayList<Chunk> finished = new ArrayList<Chunk>();
+         for (Map.Entry<Chunk, Future<Tesselator.MeshData[]>> futureForChunk : chunkUpdateFutures.entrySet()) {
+            Future<Tesselator.MeshData[]> currentFuture = futureForChunk.getValue();
+            if (currentFuture.isDone()) {
+               try {
+                  Tesselator.MeshData[] layers = currentFuture.get();
+                  // Compile display lists on RENDER THREAD ONLY:
+                  futureForChunk.getKey().uploadMeshDataToDisplayList(layers[0], 0);
+                  futureForChunk.getKey().uploadMeshDataToDisplayList(layers[1], 1);
+                  futureForChunk.getKey().markClean(); // mark clean after upload
+                  chunkUpdateFuturesStartNanos.remove(futureForChunk.getKey());
+
+                  // Count this chunk as done for the initial wave (once).
+                  if (initialBuildStarted && !initialBuildFinished && initialDirtyRemaining > 0) {
+                     initialDirtyRemaining--;
+                  }
+               } catch (Exception ex) {
+                  ex.printStackTrace();
+               }
+               finished.add(futureForChunk.getKey());
+            }
          }
+         for (Chunk c : finished) chunkUpdateFutures.remove(c);
+      }
 
+      List<Chunk> dirty = this.getAllDirtyChunks();
+
+      // Start stopwatch the first time we detect any dirty chunks.
+      // Capture the count once so we don't depend on later list recomputations.
+      if (!initialBuildStarted && dirty != null && !dirty.isEmpty()) {
+         logLiveThreadsOnce();
+         initialBuildStarted = true;
+         initialBuildFinished = false;
+         initialDirtyTotal = dirty.size();
+         initialDirtyRemaining = initialDirtyTotal;
+         initialBuildStartNanos = System.nanoTime();
+         initialBuildEndNanos = 0L;
+      }
+
+      // Finish when we've uploaded the first batch of dirty chunks and no jobs remain.
+      if (initialBuildStarted && !initialBuildFinished) {
+         if (initialDirtyRemaining <= 0 && chunkUpdateFutures.isEmpty()) {
+            initialBuildFinished = true;
+            initialBuildEndNanos = System.nanoTime();
+            long ms = (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+            System.out.println("[LevelRenderer] Initial dirty chunk build finished in " + ms + " ms"
+                  + " (" + initialDirtyTotal + " chunks)");
+         }
+      }
+
+      // We do not return early here; we want to allow "finish" detection even if dirty is empty now.
+      // (Submissions may have happened in prior frames; we need to check chunkUpdateFutures emptiness below.)
+
+      // Safe sort: only when we have 2+ items and a non-null frustum & player
+      Frustum fr = Frustum.getFrustum();
+      if (dirty != null && dirty.size() > 1 && player != null && fr != null) {
+         Collections.sort(dirty, new DirtyChunkSorter(player, fr));
+      }
+      int submitted = 0;
+
+      for (int i = 0; dirty != null && i < dirty.size() && submitted < MAX_NEW_SUBMITS_PER_FRAME; ++i) {
+         Chunk c = (Chunk) dirty.get(i);
+         if (c == null) continue;                      // skip null entries defensively
+         if (chunkUpdateFutures.containsKey(c)) continue;
+         if (!c.isDirty()) continue;
+         final Chunk target = c;
+
+         long t0 = System.nanoTime();
+         Future<Tesselator.MeshData[]> fut =
+            MESH_POOL.submit(new Callable<Tesselator.MeshData[]>() {
+               public Tesselator.MeshData[] call() {
+                  Tesselator.MeshData solid = target.buildMeshData(0);
+                  Tesselator.MeshData alpha  = target.buildMeshData(1);
+                  return new Tesselator.MeshData[] { solid, alpha };
+               }
+            });
+
+         chunkUpdateFutures.put(target, fut);
+         chunkUpdateFuturesStartNanos.put(target, Long.valueOf(System.nanoTime()));
+         // (Optional) your profiling counters:
+         Chunk.meshTimeNanos += System.nanoTime() - t0;
+         Chunk.meshCount++;
+         submitted++;
+      }
+
+      // Recompute or check state after we uploaded/submitted this frame.
+      // Finish when no dirty chunks remain and no jobs are chunkUpdateFutures.
+      if (initialBuildStarted && !initialBuildFinished) {
+         List<Chunk> dirtyAfter = this.getAllDirtyChunks();
+         boolean noneLeft = (dirtyAfter == null || dirtyAfter.isEmpty());
+         if (noneLeft && chunkUpdateFutures.isEmpty()) {
+            initialBuildFinished = true;
+            initialBuildEndNanos = System.nanoTime();
+            long ms = (initialBuildEndNanos - initialBuildStartNanos) / 1000000L;
+            System.out.println("[LevelRenderer] Initial dirty chunk build finished in " + ms + " ms");
+         }
       }
    }
 
@@ -252,10 +416,13 @@ public class LevelRenderer implements LevelListener {
    }
 
    public void tileChanged(int x, int y, int z) {
+      int tileId = this.level.getTile(x,y,z);
+      System.out.println("TILECHANGE: " + Integer.toString(x) + " "  + Integer.toString(y) + " " + Integer.toString(z) + "TILEID: " + Integer.toString(tileId));
       this.setDirty(x - 1, y - 1, z - 1, x + 1, y + 1, z + 1);
    }
 
    public void lightColumnChanged(int x, int z, int y0, int y1) {
+      System.out.println("LIGHTCHANGE: " + Integer.toString(x) +  " " + Integer.toString(z));
       this.setDirty(x - 1, y0 - 1, z - 1, x + 1, y1 + 1, z + 1);
    }
 
